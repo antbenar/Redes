@@ -127,54 +127,12 @@ void read_client( int client){
 	close(client);
 }
 
-
-//-------------------------------------------_OPENGL------------------------------------------//
-
-void display(void) 
-{  
-	glClear( GL_COLOR_BUFFER_BIT);
-	glLoadIdentity();
-	glOrtho(-10.0f,  COLS + 10, -10.0f, ROWS + 10, -1.0f, 1.0f);  
-	worm->drawSquare();
-	
-	glutPostRedisplay();
-}
-
-void window_key_glut(int key, int x, int y) {
-	switch (key) {
-	case GLUT_KEY_UP:
-		//worm->add_freezbie();
-		
-		break;
-	default:
-		break;
-	}
-	//glutPostRedisplay();
-}
-
-void InitGl(){
-	glutInitDisplayMode ( GLUT_SINGLE | GLUT_RGB | GLUT_DEPTH);
-	
-	glutInitWindowPosition(20,0); 
-	glutInitWindowSize(800,800); 
-	glutCreateWindow ("Worm");
-	
-	glClearColor(0.0, 0.0, 0.0, 0.0);         // black background 
-	glMatrixMode(GL_PROJECTION);              // setup viewing projection 
-	glutDisplayFunc(display); 
-	glutSpecialFunc(&window_key_glut);	
-	glutMainLoop();
-}
-
-
-
-
 int main(int argc, char **argv)
 {
 	SocketFD = create_socket();
 
 	worm = new Worm;
-	
+
 	while(true){
 		int client =  accept(SocketFD, NULL, NULL);
 		if(SocketFD < 0) continue;
@@ -182,8 +140,7 @@ int main(int argc, char **argv)
 		clients.push_back( client );
 		thread(read_client, client).detach();
 	}
-	glutInit(&argc, argv); 
-	InitGl();
+	
 
 	close(SocketFD);
 	return 0;
