@@ -53,32 +53,7 @@ int create_socket(){
 }
 
 
-void server_read( int client ){
-	string buffer;
-	char buf[256];
-	
-	while( true ){
-		///Read type of message (A, P, V, etc)
-		bzero(buf,256);
-		read( client , buf , 1 );
-		
-		cout << "Type of message: " << buf[0] << " " << buf[1] << " " << buf[2] <<endl;
-		/*
-		if ( buf[0] == 'M' ){
-		///M(Move TDRL) M#L [Client ---> Server][Server ---> All Clients]
-		read( clients['#'] , buf , 2 );
-		cout << "Jugador " << buf[0] << " movio: " << buf[1] <<endl;	
-		
-		}
-		
-		///F(Frebies) F0405 [Server ---> all clients]
-		*/
-		
-	}
-	
-}
-
-void accept_clients( int client){
+void read_client( int client){
 	//---------------------------------------create new player before add to game-------------------------//
 	string buffer;
 	char buf[256];
@@ -86,14 +61,24 @@ void accept_clients( int client){
 	///A(Avatar) A# [Client ---> Server] 
 	bzero(buf,256);
 	read(  client , buf , 2 );
+	if ( buf[0] != 'A' ) {
+		cout << "error de protocolo al enviar avatar";
+		return;
+	}
+	
+	while( worm->exist_player(buf[1]) ){
+		///V(Avatar is in use) [Server ---> Client]
+		buf[0] = 'V';
+		write( client, buf , 1 );  
+	}
+	///O(Avatar has been assigned) [Server ---> Client]	  //responder al cliente que su avatar fue creado
+	buf[0] = 'O';
+	write( client, buf , 1 );  
+
+	worm->add_new_player(buf[1]);//agregar nuevo jugador
 	cout << "Nuevo jugador ingreso con avatar: " << buf[1] << endl;
 	
-	///V(Avatar is in use) [Server ---> Client]
-	
-	///O(Avatar has been assigned) [Server ---> Client]			//responder al cliente que su avatar fue creado
-	
-	
-	///P(new player) P# [Server -> all clients]
+	///P(new player) P# [Server -> all clients]		//comunicar a todos los demas player del nuevo jugador
 	buffer = "P";
 	buffer.push_back(buf[1]);
 	for (int i=0; i<clients.size(); ++i){
@@ -101,18 +86,90 @@ void accept_clients( int client){
 	}
 	
 	///U(send the Matrix) VVVVO###VVVVVVVVVVV....VVV(6400) [Server ---> client]
+	buffer = "U" + worm->get_tablero();
+	write( client, buffer.c_str() , buffer.size() );  
+	
 	///Q(send avatars of all players) Q04#P63 [Server ---> client] 
+	buffer = "Q" + worm->get_players();
+	write( client, buffer.c_str() , buffer.size() );  
 	
 	
 	//--------------------------------------- END create new player before add to game-------------------------//
 	
-	//thread(server_read, client).detach();
+	while( true ){
+		///Read type of message
+		bzero(buf,256);
+		read( client , buf , 1 );
+		
+		if ( buf[0] == 'M' ){	///M(Move TDRL) M#L [Client ---> Server]
+			read( client , buf , 2 );
+			worm->move(buf[0],buf[1]);
+			cout << "Jugador " << buf[0] << " movio: " << buf[1] <<endl;	
+			
+			///M(Move TDRL) M#L [Server ---> All Clients]
+			buffer = buf;
+			buffer.insert(0,"M");
+			for (int i=0; i<clients.size(); ++i){
+				write( clients[i], buffer.c_str() , 3 );     
+			}
+
+			if(worm->check_add_freezbie()){
+				///F(Frebies) F0405 [Server ---> all clients]	enviar notificacion a todos los jugadores de que hay un nuevo freezbie
+				buffer = "F" + worm->get_freezbiex() + worm->get_freezbiey();
+				for (int i=0; i<clients.size(); ++i){
+					write( clients[i], buffer.c_str() , buffer.size() );     
+				}
+			}
+		}	
+	}
 	
 	shutdown(client, SHUT_RDWR);
 	close(client);
 }
 
-int main()
+
+//-------------------------------------------_OPENGL------------------------------------------//
+
+void display(void) 
+{  
+	glClear( GL_COLOR_BUFFER_BIT);
+	glLoadIdentity();
+	glOrtho(-10.0f,  COLS + 10, -10.0f, ROWS + 10, -1.0f, 1.0f);  
+	worm->drawSquare();
+	
+	glutPostRedisplay();
+}
+
+void window_key_glut(int key, int x, int y) {
+	switch (key) {
+	case GLUT_KEY_UP:
+		//worm->add_freezbie();
+		
+		break;
+	default:
+		break;
+	}
+	//glutPostRedisplay();
+}
+
+void InitGl(){
+	glutInitDisplayMode ( GLUT_SINGLE | GLUT_RGB | GLUT_DEPTH);
+	
+	glutInitWindowPosition(20,0); 
+	glutInitWindowSize(800,800); 
+	glutCreateWindow ("Worm");
+	
+	glClearColor(0.0, 0.0, 0.0, 0.0);         // black background 
+	glMatrixMode(GL_PROJECTION);              // setup viewing projection 
+	glutDisplayFunc(display); 
+	glutSpecialFunc(&window_key_glut);	
+	glutMainLoop();
+}
+
+
+
+
+int main(int argc, char **argv)
 {
 	SocketFD = create_socket();
 
@@ -120,17 +177,25 @@ int main()
 	
 	while(true){
 		int client =  accept(SocketFD, NULL, NULL);
-		clients.push_back( client );
+		if(SocketFD < 0) continue;
 		
-		thread(accept_clients, client).detach();
+		clients.push_back( client );
+		thread(read_client, client).detach();
 	}
-	
-	//for (auto& th : threads) th.join();
-	
+	glutInit(&argc, argv); 
+	InitGl();
+
 	close(SocketFD);
 	return 0;
 }
 	
+
+
+
+
+
+
+
    // fuser -k -n tcp 1100 //cancelar socket
 
   /*
